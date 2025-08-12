@@ -7,3 +7,4 @@ Pillow
 python-dotenv
 colored
 pyfiglet
+qrcode
