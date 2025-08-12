@@ -3,8 +3,8 @@ import logging
 import re
 from neonize.aioze.client import NewAClient
 from neonize.aioze.events import MessageEv, ConnectedEv
-from .plugin_manager import PluginManager
-from .py_handler import handle_message
+from plugin_manager import PluginManager
+from py_handler import handle_message
 from colored import fg, attr
 import pyfiglet
 
