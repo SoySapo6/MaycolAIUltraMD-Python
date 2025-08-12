@@ -6,8 +6,6 @@ import threading
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-logging.basicConfig(level=logging.INFO)
-
 # Get the absolute path to the directory containing this file
 _MANAGER_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -22,19 +20,19 @@ class PluginChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path.endswith(".py") and not os.path.basename(event.src_path).startswith("__"):
             plugin_name = os.path.basename(event.src_path)[:-3]
-            logging.info(f"Detected modification in {plugin_name}.py, reloading...")
+            logging.warning(f"PLUGIN MODIFIED: {plugin_name}.py, reloading...")
             self.manager.reload_plugin(plugin_name)
 
     def on_created(self, event):
         if event.src_path.endswith(".py") and not os.path.basename(event.src_path).startswith("__"):
             plugin_name = os.path.basename(event.src_path)[:-3]
-            logging.info(f"Detected new plugin {plugin_name}.py, loading...")
+            logging.info(f"PLUGIN NEW: {plugin_name}.py, loading...")
             self.manager.load_plugin(plugin_name)
 
     def on_deleted(self, event):
         if event.src_path.endswith(".py") and not os.path.basename(event.src_path).startswith("__"):
             plugin_name = os.path.basename(event.src_path)[:-3]
-            logging.info(f"Detected deletion of {plugin_name}.py, unloading...")
+            logging.warning(f"PLUGIN DELETED: {plugin_name}.py, unloading...")
             self.manager.unload_plugin(plugin_name)
 
 
@@ -57,17 +55,17 @@ class PluginManager:
                 'help': getattr(module, 'HELP', ''),
                 'tags': getattr(module, 'TAGS', ['uncategorized'])
             }
-            logging.info(f"Successfully loaded plugin: {plugin_name}")
+            logging.info(f"-> PLUGIN LOADED: {plugin_name}")
         except Exception as e:
-            logging.error(f"Failed to load plugin {plugin_name}: {e}")
+            logging.error(f"PLUGIN LOAD FAILED: {plugin_name} - {e}")
 
     def load_all_plugins(self):
-        logging.info(f"Loading all plugins from '{self.plugin_folder}'...")
+        logging.info("Loading all plugins...")
         for filename in os.listdir(self.plugin_folder):
             if filename.endswith(".py") and not filename.startswith("__"):
                 plugin_name = filename[:-3]
                 self.load_plugin(plugin_name)
-        logging.info(f"Loaded {len(self.plugins)} plugins.")
+        logging.info(f"-> LOADED {len(self.plugins)} plugins.")
 
     def reload_plugin(self, plugin_name):
         if plugin_name in self.plugins:
@@ -81,16 +79,16 @@ class PluginManager:
                     'help': getattr(module, 'HELP', ''),
                     'tags': getattr(module, 'TAGS', ['uncategorized'])
                 }
-                logging.info(f"Successfully reloaded plugin: {plugin_name}")
+                logging.info(f"-> PLUGIN RELOADED: {plugin_name}")
             except Exception as e:
-                logging.error(f"Failed to reload plugin {plugin_name}: {e}")
+                logging.error(f"PLUGIN RELOAD FAILED: {plugin_name} - {e}")
         else:
             self.load_plugin(plugin_name)
 
     def unload_plugin(self, plugin_name):
         if plugin_name in self.plugins:
             del self.plugins[plugin_name]
-            logging.info(f"Successfully unloaded plugin: {plugin_name}")
+            logging.info(f"-> PLUGIN UNLOADED: {plugin_name}")
 
     def watch_plugins(self):
         event_handler = PluginChangeHandler(self)
@@ -101,5 +99,5 @@ class PluginManager:
         thread.daemon = True
         thread.start()
 
-        logging.info(f"Watching for plugin changes in '{self.plugin_folder}'...")
+        logging.info("Watching for plugin changes...")
         return observer

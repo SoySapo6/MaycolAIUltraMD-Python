@@ -18,13 +18,13 @@ async def handle_message(client, event, plugin_manager):
     command = parts[0].lower()
     args = parts[1:]
 
-    logging.info(f"Command received: '{command}' from {m.sender} with args: {args}")
+    logging.info(f"CMD: '{command}' from {m.sender}")
 
     # Find and execute the plugin
     for plugin_name, plugin_info in plugin_manager.plugins.items():
         if plugin_info['command'] == command:
             try:
-                logging.info(f"Executing plugin: {plugin_name}")
+                logging.info(f"-> PLUGIN: {plugin_name}")
                 module = plugin_info['module']
 
                 # Special case for the menu plugin to give it access to the manager
@@ -36,8 +36,8 @@ async def handle_message(client, event, plugin_manager):
                 if response:
                     await m.reply(response)
             except Exception as e:
-                logging.error(f"Error executing plugin {plugin_name}: {e}")
+                logging.error(f"PLUGIN ERROR: {plugin_name} - {e}")
                 await m.reply(f"Error: {e}")
             return  # Stop after finding the command
 
-    logging.warning(f"Command '{command}' not found.")
+    logging.warning(f"CMD NOT FOUND: '{command}'")
