@@ -226,7 +226,7 @@ async def main():
         # Iniciar monitoreo
         asyncio.create_task(monitorear_conexion())
             
-        elif opcion == '2':
+        if opcion == '2':
             # Método de código de emparejamiento
             numero_telefono = ""
             while not re.match(r'^\d{10,15}$', numero_telefono):
