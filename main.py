@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 from neonize.aioze.client import NewAClient
-from neonize.aioze.events import MessageEv, ConnectedEv, QRCodeEv
+from neonize.aioze.events import MessageEv, ConnectedEv
 from plugin_manager import PluginManager
 from py_handler import handle_message
 from colored import fg, attr
@@ -142,14 +142,35 @@ async def main():
         # Variable para controlar si ya estamos conectados
         conectado = False
         
-        # Manejar eventos ANTES de la conexión
-        @cliente.event
-        async def on_qr_code(cliente: NewAClient, evento):
-            """Maneja el evento del código QR."""
-            nonlocal conectado
-            if not conectado:
-                logging.info("📱 Código QR recibido!")
-                mostrar_qr_en_terminal(evento.code if hasattr(evento, 'code') else str(evento))
+        # Intentar registrar manejo de QR si existe el evento
+        try:
+            # Buscar eventos disponibles para QR
+            eventos_qr_posibles = ['QRCodeEv', 'QRCode', 'qr_code', 'on_qr', 'qr']
+            evento_qr_encontrado = None
+            
+            # Importar dinámicamente eventos disponibles
+            import neonize.aioze.events as eventos
+            
+            for nombre_evento in eventos_qr_posibles:
+                if hasattr(eventos, nombre_evento):
+                    evento_qr_encontrado = getattr(eventos, nombre_evento)
+                    logging.info(f"Evento QR encontrado: {nombre_evento}")
+                    break
+            
+            if evento_qr_encontrado:
+                @cliente.event
+                async def on_qr_code(cliente: NewAClient, evento):
+                    """Maneja el evento del código QR."""
+                    nonlocal conectado
+                    if not conectado:
+                        logging.info("📱 Código QR recibido!")
+                        codigo_qr = getattr(evento, 'code', None) or getattr(evento, 'qr', None) or str(evento)
+                        mostrar_qr_en_terminal(codigo_qr)
+            else:
+                logging.warning("No se encontró evento QR disponible en la librería")
+                
+        except Exception as e:
+            logging.warning(f"No se pudo configurar manejo de QR: {e}")
 
         @cliente.event  
         async def al_conectar(cliente: NewAClient, evento: ConnectedEv):
@@ -179,10 +200,31 @@ async def main():
             logging.error(f"Error al cargar plugins: {e}")
             logging.info("Continuando sin plugins...")
 
+        # Método alternativo: monitorear la conexión
         if opcion == '1':
-            # Método QR
             logging.info("Iniciando con método QR...")
-            logging.info("Esperando código QR...")
+            logging.info("⏳ Si no aparece el código QR automáticamente,")
+            logging.info("   revisa la documentación de neonize para el método QR correcto")
+            logging.info("   o intenta el método de código de emparejamiento (opción 2)")
+            
+        # Crear tarea para monitorear el estado
+        async def monitorear_conexion():
+            intentos = 0
+            while not conectado and intentos < 30:  # 30 segundos máximo
+                await asyncio.sleep(1)
+                intentos += 1
+                if intentos % 5 == 0:
+                    logging.info(f"⏳ Esperando autenticación... ({intentos}s)")
+            
+            if not conectado:
+                logging.warning("⚠️  Tiempo de espera agotado para la autenticación")
+                logging.info("💡 Sugerencias:")
+                logging.info("   1. Verifica que tu internet esté funcionando")
+                logging.info("   2. Prueba reiniciar el bot")
+                logging.info("   3. Usa el método de código de emparejamiento")
+        
+        # Iniciar monitoreo
+        asyncio.create_task(monitorear_conexion())
             
         elif opcion == '2':
             # Método de código de emparejamiento
@@ -213,12 +255,29 @@ async def main():
                 logging.warning("No se pudo obtener código de emparejamiento.")
                 logging.info("Cambiando automáticamente a método QR...")
 
-        # Conectar al cliente
-        logging.info("Conectando a WhatsApp...")
-        logging.info("⏳ Esperando autenticación...")
+        # Conectar al cliente con mejor manejo de errores
+        logging.info("🔌 Conectando a WhatsApp...")
         
-        # Iniciar la conexión
-        await cliente.connect()
+        try:
+            # Conectar con timeout
+            conexion_task = asyncio.create_task(cliente.connect())
+            await asyncio.wait_for(conexion_task, timeout=10.0)
+            
+        except asyncio.TimeoutError:
+            logging.warning("⏱️ Conexión inicial tomó más tiempo del esperado")
+            logging.info("   Continuando en segundo plano...")
+            
+        except Exception as e:
+            logging.error(f"❌ Error de conexión: {e}")
+            logging.info("🔄 Reintentando...")
+            
+            # Reintentar una vez
+            try:
+                await asyncio.sleep(2)
+                await cliente.connect()
+            except Exception as e2:
+                logging.error(f"❌ Segundo intento falló: {e2}")
+                return
         
         # Mantener el bot corriendo
         while True:
