@@ -8,24 +8,24 @@ from py_handler import handle_message
 from colored import fg, attr
 import pyfiglet
 
-def print_banner():
-    """Prints a cool startup banner."""
+def mostrar_banner():
+    """Muestra un banner de inicio genial."""
     color = fg('yellow')
     reset = attr('reset')
-    author_color = fg('cyan')
+    color_autor = fg('cyan')
 
-    # Generate ASCII art
-    ascii_art = pyfiglet.figlet_format("MaycolAIUltraMD", font="block")
+    # Generar arte ASCII
+    arte_ascii = pyfiglet.figlet_format("MaycolAIUltraMD", font="block")
 
-    # Print banner
-    print(f"{color}{ascii_art}{reset}")
-    print(f"{author_color}                 Hecho por Maycol                           {reset}")
+    # Mostrar banner
+    print(f"{color}{arte_ascii}{reset}")
+    print(f"{color_autor}                 Hecho por Maycol                           {reset}")
     print()
 
-def setup_logging():
-    """Sets up the colored logging."""
-    class ColoredFormatter(logging.Formatter):
-        COLORS = {
+def configurar_logging():
+    """Configura el logging con colores."""
+    class FormateadorColoreado(logging.Formatter):
+        COLORES = {
             'WARNING': fg('yellow'),
             'INFO': fg('green'),
             'DEBUG': fg('blue'),
@@ -34,95 +34,155 @@ def setup_logging():
         }
 
         def format(self, record):
-            log_message = super().format(record)
-            color = self.COLORS.get(record.levelname)
+            mensaje_log = super().format(record)
+            color = self.COLORES.get(record.levelname)
             if color:
-                return f"{color}{log_message}{attr('reset')}"
-            return log_message
+                return f"{color}{mensaje_log}{attr('reset')}"
+            return mensaje_log
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
-    handler.setFormatter(ColoredFormatter('%(levelname)s: %(message)s'))
+    handler.setFormatter(FormateadorColoreado('%(levelname)s: %(message)s'))
     if logger.hasHandlers():
         logger.handlers.clear()
     logger.addHandler(handler)
 
+async def obtener_codigo_emparejamiento(cliente, numero_telefono):
+    """Intenta obtener el código de emparejamiento usando diferentes métodos."""
+    metodos = [
+        'request_pairing_code',
+        'requestPairingCode', 
+        'get_pairing_code',
+        'getPairingCode',
+        'pairing_code',
+        'generate_pairing_code'
+    ]
+    
+    for metodo in metodos:
+        if hasattr(cliente, metodo):
+            try:
+                func = getattr(cliente, metodo)
+                logging.info(f"Intentando método: {metodo}")
+                codigo = await func(numero_telefono)
+                return codigo
+            except Exception as e:
+                logging.warning(f"Método {metodo} falló: {e}")
+                continue
+    
+    # Si ningún método funciona, intentar conectar directamente
+    logging.warning("No se pudo obtener código de emparejamiento automáticamente.")
+    logging.info("Intenta conectar tu teléfono manualmente o usa el método QR.")
+    return None
+
 async def main():
-    """Main function to initialize, configure, and run the bot."""
-    print_banner()
-    setup_logging()
+    """Función principal para inicializar, configurar y ejecutar el bot."""
+    mostrar_banner()
+    configurar_logging()
 
-    # --- Interactive Login ---
-    print("Please choose a login method:")
-    print(f"{fg('green')}1. Scan QR Code{attr('reset')}")
-    print(f"{fg('cyan')}2. Use Pairing Code (Phone Number){attr('reset')}")
+    # --- Login Interactivo ---
+    print("Por favor elige un método de inicio de sesión:")
+    print(f"{fg('green')}1. Escanear Código QR{attr('reset')}")
+    print(f"{fg('cyan')}2. Usar Código de Emparejamiento (Número de Teléfono){attr('reset')}")
 
-    choice = ""
-    while choice not in ['1', '2']:
-        choice = await asyncio.to_thread(input, "> ")
-
-    client: NewAClient
-
-    if choice == '1':
-        # Assume 'print_qr_in_terminal' is a valid, but perhaps non-existent, kwarg.
-        # The library might print QR by default if not logged in.
+    opcion = ""
+    while opcion not in ['1', '2']:
         try:
-            client = NewAClient("maycol_ai_bot_session.db", print_qr_in_terminal=True)
-        except TypeError:
-            logging.warning("`print_qr_in_terminal` is not a valid argument for NewAClient. "
-                            "Relying on default behavior to print QR code.")
-            client = NewAClient("maycol_ai_bot_session.db")
+            opcion = await asyncio.to_thread(input, "> ")
+        except EOFError:
+            logging.error("Entrada interrumpida. Usando método QR por defecto.")
+            opcion = '1'
+            break
 
-    elif choice == '2':
-        client = NewAClient("maycol_ai_bot_session.db")
+    cliente: NewAClient
 
-        phone_number = ""
-        while not re.match(r'^\d{10,15}$', phone_number):
-             phone_number = await asyncio.to_thread(
-                input,
-                f"{fg('yellow')}Please enter your full phone number without '+' or spaces (e.g., 15551234567):{attr('reset')} "
-             )
+    try:
+        if opcion == '1':
+            # Método QR - configuración más simple
+            logging.info("Iniciando con método QR...")
+            cliente = NewAClient("maycol_ai_bot_session.db")
+            
+        elif opcion == '2':
+            # Método de código de emparejamiento
+            cliente = NewAClient("maycol_ai_bot_session.db")
 
-        logging.info(f"Requesting pairing code for {phone_number}...")
+            numero_telefono = ""
+            while not re.match(r'^\d{10,15}$', numero_telefono):
+                try:
+                    numero_telefono = await asyncio.to_thread(
+                        input,
+                        f"{fg('yellow')}Ingresa tu número de teléfono completo sin '+' o espacios (ej: 15551234567):{attr('reset')} "
+                    )
+                    numero_telefono = re.sub(r'[^\d]', '', numero_telefono)  # Limpiar número
+                except EOFError:
+                    logging.error("Entrada interrumpida.")
+                    return
+
+            logging.info(f"Solicitando código de emparejamiento para {numero_telefono}...")
+            
+            codigo_emparejamiento = await obtener_codigo_emparejamiento(cliente, numero_telefono)
+            
+            if codigo_emparejamiento:
+                logging.info(f"{fg('magenta')}--- CÓDIGO DE EMPAREJAMIENTO ---{attr('reset')}")
+                logging.info(f"Tu código de emparejamiento es: {fg('cyan')}{codigo_emparejamiento}{attr('reset')}")
+                logging.info(f"{fg('magenta')}--------------------------------{attr('reset')}")
+            else:
+                logging.warning("No se pudo obtener código de emparejamiento. Cambiando a método QR.")
+                
+    except Exception as e:
+        logging.error(f"Error al crear cliente: {e}")
+        logging.info("Creando cliente con configuración básica...")
+        cliente = NewAClient("maycol_ai_bot_session.db")
+
+    # Inicializar gestor de plugins con manejo de errores
+    try:
+        plugin_manager = PluginManager()
+    except Exception as e:
+        logging.error(f"Error al inicializar PluginManager: {e}")
+        logging.info("Continuando sin sistema de plugins...")
+        plugin_manager = None
+
+    # Definir manejadores de eventos
+    @cliente.event
+    async def al_conectar(_: NewAClient, evento: ConnectedEv):
+        """Maneja el evento 'conectado'."""
+        logging.info("🎉 ¡Bot conectado exitosamente!")
+        logging.info(f"Conectado a la cuenta: {evento.device}")
+
+    @cliente.event
+    async def al_recibir_mensaje(cliente: NewAClient, evento: MessageEv):
+        """Maneja mensajes entrantes delegando al manejador."""
         try:
-            # Assume this method exists and returns the code.
-            pairing_code = await client.request_pairing_code(phone_number)
-            logging.info(f"{fg('magenta')}--- PAIRING CODE ---{attr('reset')}")
-            logging.info(f"Your pairing code is: {fg('cyan')}{pairing_code}{attr('reset')}")
-            logging.info(f"{fg('magenta')}--------------------{attr('reset')}")
-        except AttributeError:
-            logging.error("`request_pairing_code` method not found on the client.")
-            logging.error("Cannot proceed with pairing code login.")
-            return
+            await handle_message(cliente, evento, plugin_manager)
         except Exception as e:
-            logging.error(f"Failed to get pairing code: {e}")
-            return
+            logging.error(f"Error al manejar mensaje: {e}")
 
-    plugin_manager = PluginManager()
+    # Cargar plugins y comenzar a observar (si están disponibles)
+    if plugin_manager:
+        try:
+            plugin_manager.load_all_plugins()
+            plugin_manager.watch_plugins()
+            logging.info("Sistema de plugins cargado correctamente.")
+        except Exception as e:
+            logging.error(f"Error al cargar plugins: {e}")
+            logging.info("Continuando sin plugins...")
 
-    # Define event handlers
-    @client.event
-    async def on_connected(_: NewAClient, event: ConnectedEv):
-        """Handles the 'connected' event."""
-        logging.info("🎉 Bot connected successfully!")
-        logging.info(f"Connected to account: {event.device}")
-
-    @client.event
-    async def on_message(client: NewAClient, event: MessageEv):
-        """Handles incoming messages by delegating to the handler."""
-        await handle_message(client, event, plugin_manager)
-
-    # Load plugins and start watching
-    plugin_manager.load_all_plugins()
-    plugin_manager.watch_plugins()
-
-    logging.info("Connecting to WhatsApp...")
-    await client.connect()
+    logging.info("Conectando a WhatsApp...")
+    
+    try:
+        await cliente.connect()
+    except Exception as e:
+        logging.error(f"Error de conexión: {e}")
+        logging.info("Reintentando conexión...")
+        await asyncio.sleep(5)
+        await cliente.connect()
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logging.info("Bot stopped manually.")
+        logging.info("Bot detenido manualmente.")
+    except Exception as e:
+        logging.error(f"Error crítico: {e}")
+        logging.info("El bot se cerrará.")
