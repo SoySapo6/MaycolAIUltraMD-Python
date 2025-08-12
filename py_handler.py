@@ -1,5 +1,5 @@
 import logging
-from .py_lib.simple import serialize_message
+from py_lib.simple import serialize_message
 
 # A simple prefix for commands
 PREFIX = "."
