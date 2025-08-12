@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 from neonize.aioze.client import NewAClient
-from neonize.aioze.events import MessageEv, ConnectedEv, QRCodeEv
+from neonize.aioze.events import MessageEv, ConnectedEv
 from plugin_manager import PluginManager
 from py_handler import handle_message
 from colored import fg, attr
@@ -137,16 +137,54 @@ async def main():
         # Variable para controlar si ya estamos conectados
         conectado = False
 
-        # Evento para manejar QR Code - CORRECCIÓN PRINCIPAL
-        @cliente.event
-        async def on_qr_code(cliente: NewAClient, evento: QRCodeEv):
-            """Maneja el evento del código QR."""
-            nonlocal conectado
-            if not conectado:
-                logging.info("📱 Código QR recibido!")
-                # Obtener el código QR del evento
-                codigo_qr = evento.code
-                mostrar_qr_en_terminal(codigo_qr)
+        # Detectar eventos QR dinámicamente
+        import neonize.aioze.events as eventos
+        
+        # Lista de posibles nombres de eventos QR
+        eventos_qr_posibles = [
+            'QRCodeEv', 'QRCode', 'QREvent', 'qr_code', 'qr_code_event',
+            'PairingCode', 'AuthenticationEv', 'LoginEv'
+        ]
+        
+        evento_qr_encontrado = None
+        for nombre_evento in eventos_qr_posibles:
+            if hasattr(eventos, nombre_evento):
+                evento_qr_encontrado = getattr(eventos, nombre_evento)
+                logging.info(f"✅ Evento QR encontrado: {nombre_evento}")
+                break
+        
+        if evento_qr_encontrado:
+            # Registrar el evento QR dinámicamente
+            def crear_handler_qr():
+                async def on_qr_code(cliente: NewAClient, evento):
+                    nonlocal conectado
+                    if not conectado:
+                        logging.info("📱 Código QR recibido!")
+                        # Intentar obtener el código del evento
+                        codigo_qr = None
+                        for attr in ['code', 'qr', 'data', 'qr_code', 'content']:
+                            if hasattr(evento, attr):
+                                codigo_qr = getattr(evento, attr)
+                                break
+                        
+                        if codigo_qr:
+                            mostrar_qr_en_terminal(codigo_qr)
+                        else:
+                            logging.warning("⚠️ No se pudo extraer el código QR del evento")
+                            print(f"Evento recibido: {evento}")
+                
+                return on_qr_code
+            
+            # Intentar registrar el evento
+            try:
+                handler_qr = crear_handler_qr()
+                cliente.event(handler_qr)
+                logging.info("📱 Handler de QR registrado correctamente")
+            except Exception as e:
+                logging.warning(f"⚠️ Error al registrar handler QR: {e}")
+        else:
+            logging.warning("⚠️ No se encontró evento QR en la librería")
+            logging.info("💡 El QR podría aparecer automáticamente o necesitar configuración adicional")
 
         @cliente.event  
         async def al_conectar(cliente: NewAClient, evento: ConnectedEv):
