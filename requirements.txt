@@ -1,0 +1,7 @@
+neonize
+watchdog
+tinydb
+requests
+beautifulsoup4
+Pillow
+python-dotenv
